@@ -1,0 +1,11 @@
+bday
+bot
+botop
+reactmsg
+mute
+mutechannel
+helper
+mod
+admin
+joinrole
+suggest
