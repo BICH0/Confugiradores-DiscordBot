@@ -814,24 +814,28 @@ async def report(ctx, opt=None, body=None, excess=None):
         em.add_field(name='Sugerencia',value='Si tienes una idea que crees que puede aportar algo positivo al bot, ya sean funciones, alias para comandos o opciones usa `$report suggest <Sugerencia>`')
         await ctx.send(embed=em)
         return
-    support_channel= bot.get_channel(feedback_channel)
-    if opt == 'suggest' or opt == 'sugerencia':
-        await ctx.channel.purge(limit=1)
-        em = discord.Embed(title='SUGERENCIA',description=f'Sugerencia enviada en {ctx.guild}',color=3066993)
-        em.add_field(name='Autor',value=str(ctx.author))
-        em.add_field(name='Sugerencia',value=str(body))
-        await support_channel.send(embed=em)
-    elif opt == 'bug' or opt == 'report' or opt == 'fallo':
-        await ctx.channel.purge(limit=1)
-        em = discord.Embed(title='BUG',description=f'Bug encontrado en {ctx.guild}',color=16705372)
-        em.add_field(name='Autor', value=str(ctx.author))
-        em.add_field(name='Bug', value=str(body))
-        await support_channel.send(embed=em)
-    else:
-        em = discord.Embed(title='Argumento invalido',description=f'{opt} no es una opción valida, a continuación tienes las opcines validas.',color=16711680)
-        em.add_field(name='Bug',value='Si encuentras un fallo, algo que no funciona o cualquier falta de ortografia/expresión usa `$report bug <Descripcion del fallo que has encontrado>`')
-        em.add_field(name='Sugerencia',value='Si tienes una idea que crees que puede aportar algo positivo al bot, ya sean funciones, alias para comandos o opciones usa `$report suggest <Sugerencia>`')
-        await support_channel.send(embed=em)
+    try:
+        support_channel= bot.get_channel(feedback_channel)
+        if opt == 'suggest' or opt == 'sugerencia':
+            await ctx.channel.purge(limit=1)
+            em = discord.Embed(title='SUGERENCIA',description=f'Sugerencia enviada en {ctx.guild}',color=3066993)
+            em.add_field(name='Autor',value=str(ctx.author))
+            em.add_field(name='Sugerencia',value=str(body))
+            await support_channel.send(embed=em)
+        elif opt == 'bug' or opt == 'report' or opt == 'fallo':
+            await ctx.channel.purge(limit=1)
+            em = discord.Embed(title='BUG',description=f'Bug encontrado en {ctx.guild}',color=16705372)
+            em.add_field(name='Autor', value=str(ctx.author))
+            em.add_field(name='Bug', value=str(body))
+            await support_channel.send(embed=em)
+        else:
+            em = discord.Embed(title='Argumento invalido',description=f'{opt} no es una opción valida, a continuación tienes las opcines validas.',color=16711680)
+            em.add_field(name='Bug',value='Si encuentras un fallo, algo que no funciona o cualquier falta de ortografia/expresión usa `$report bug <Descripcion del fallo que has encontrado>`')
+            em.add_field(name='Sugerencia',value='Si tienes una idea que crees que puede aportar algo positivo al bot, ya sean funciones, alias para comandos o opciones usa `$report suggest <Sugerencia>`')
+            await support_channel.send(embed=em)
+    except:
+        em = discord.Embed(title='No existe canal de soporte',description='Este servidor no tiene canal de soporte, habla con el owner para que lo active.',color=16711680)
+        await ctx.send(embed=em)
 
 
 # ◤━━━━━━━━━━━━━━━━━━━━━━°•OP•°━━━━━━━━━━━━━━━━━━━━━━━◥
@@ -972,7 +976,7 @@ async def settings(ctx):
     em.add_field(name='_admin_', value='Este rol permite a los usuarios que lo tengan a interactuar completamente con el bot', inline=True)
     em.add_field(name='_mutechannel_', value='Este canal es el canal que verán las personas con el rol de mute', inline=True)
     em.add_field(name='_joinrole_', value='Este rol es el que se asignará a todos los usuarios que entren al servidor',inline=True)
-    em.add_field(name='_suggest_', value='Permite cambiar el canal al que se envian las sugerencias realizadas con $suggest .', inline=True)
+    em.add_field(name='_suggest_', value='Permite cambiar el canal al que se envian las sugerencias realizadas con $suggest.', inline=True)
     await ctx.send(embed=em)
 
 @help.command(aliases=['reactions', 'reaccion' , 'react'])
