@@ -5,8 +5,7 @@ from dotenv import load_dotenv
 from os import getenv
 import emojis
 import cogs.mysql_disc as mysql
-from PIL import Image
-from io import BytesIO
+from datetime import datetime, timedelta
 
 # EOF IMPORT
 load_dotenv()
@@ -25,12 +24,24 @@ feedback_channel = int(getenv("CHANNEL"))
 
 #TASKS
 @tasks.loop(hours=24)
-async def daily_check():
+async def bdaycheck():
     for guild in bot.guilds:
         try:
             await mysql.bday_check(guild)
         except:
             pass
+
+@bdaycheck.before_loop
+async def before_my_task():
+    hour = 00
+    minute = 1
+    await bot.wait_until_ready()
+    now = datetime.now()
+    future = datetime(now.year, now.month, now.day, hour, minute)
+    if now.hour >= hour and now.minute > minute:
+        future += timedelta(days=1)
+    print((future-now).seconds)
+    await asyncio.sleep((future-now).seconds)
 
 @tasks.loop(hours=2)
 async def ping_mysql():
@@ -48,27 +59,27 @@ class InsuficientPermissions(Exception):
 async def on_ready():
     print("""
 ┌————————————————————————————————————————————————————————————————————————————————————————————┐
-      ___       __       __   
-     / _ )___  / /_  ___/ /__ 
+      ___       __       __
+     / _ )___  / /_  ___/ /__
     / _  / _ \/ __/ / _  / -_)
-   /____/\___/\__/  \_,_/\__/ 
-                           
+   /____/\___/\__/  \_,_/\__/
+
        __________  _   __________  ________________  ___    ____  ____  ____  ___________
       / ____/ __ \/ | / / ____/ / / / ____/  _/ __ \/   |  / __ \/ __ \/ __ \/ ____/ ___/
-     / /   / / / /  |/ / /_  / / / / / __ / // /_/ / /| | / / / / / / / /_/ / __/  \__ \ 
-    / /___/ /_/ / /|  / __/ / /_/ / /_/ // // _, _/ ___ |/ /_/ / /_/ / _, _/ /___ ___/ / 
-    \____/\____/_/ |_/_/    \____/\____/___/_/ |_/_/  |_/_____/\____/_/ |_/_____//____/    
+     / /   / / / /  |/ / /_  / / / / / __ / // /_/ / /| | / / / / / / / /_/ / __/  \__ \      
+    / /___/ /_/ / /|  / __/ / /_/ / /_/ // // _, _/ ___ |/ /_/ / /_/ / _, _/ /___ ___/ /
+    \____/\____/_/ |_/_/    \____/\____/___/_/ |_/_/  |_/_____/\____/_/ |_/_____//____/
 
 └————————————————————————————————————————————————————————————————————————————————————————————┘
-                       _    _     _ 
+                       _    _     _
  /|,/_   _/_   /_     /_)-// `/_// /
-/  //_|/_//_' /_//_/ /_) //_,/ //_/ 
-                 _/                 
-""")
+/  //_|/_//_' /_//_/ /_) //_,/ //_/
+                 _/""")
     print("""
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛ ✠ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""")
-    daily_check.start()
+    bdaycheck.start()
     ping_mysql.start()
+    bot.load_extension("cogs.images")
     for server in bot.guilds:
         await mysql.settings_update(server.name)
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers | Usa $help "))
@@ -78,7 +89,11 @@ async def on_ready():
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound) or isinstance(error, commands.CheckFailure):
         return
+    elif isinstance(error, commands.errors.MemberNotFound):
+        em = discord.Embed(title=f'Unknown user',description=f'No se ha podido encontrar al usuario.',color=16711680)
+        await ctx.send(embed=em)
     else:
+        print(error)
         raise error
 
 @bot.event
@@ -216,7 +231,7 @@ def owner_or_admin():
                 except ValueError:
                     raise InsuficientPermissions
         except InsuficientPermissions:
-            em = discord.Embed(title='Insuficient permissions',description=f'No tienes los permisos suficientes para ejecutar ese comando.',color=16711680)
+            em = discord.Embed(title='Insuficient permissions',description='No tienes los permisos suficientes para ejecutar ese comando.',color=16711680)
             await ctx.send(embed=em)
     return commands.check(predicate)
 
@@ -240,7 +255,7 @@ def mod_or_higher():
                 else:
                     raise commands.CheckFailure()
         except InsuficientPermissions:
-            em = discord.Embed(title='Insuficient permissions',description=f'No tienes los permisos suficientes para ejecutar ese comando.',color=16711680)
+            em = discord.Embed(title='Insuficient permissions',description='No tienes los permisos suficientes para ejecutar ese comando.',color=16711680)
             await ctx.send(embed=em)
     return commands.check(predicate)
 
@@ -262,7 +277,7 @@ def helper_or_higher():
                 except ValueError:
                     raise InsuficientPermissions
         except InsuficientPermissions:
-            em = discord.Embed(title='Insuficient permissions',description=f'No tienes los permisos suficientes para ejecutar ese comando.',color=16711680)
+            em = discord.Embed(title='Insuficient permissions',description='No tienes los permisos suficientes para ejecutar ese comando.',color=16711680)
             await ctx.send(embed=em)
     return commands.check(predicate)
 
@@ -273,15 +288,15 @@ def helper_or_higher():
 @owner_or_admin()
 async def settings(ctx, opt=None, newval=None):
         if opt is None:
-            em = discord.Embed(title='Insuficient arguments',description=f'No has facilitado ninguna opción, usa `$settings <opcion>` para consultar su valor o `$help settings` para visualizar las opciones.',color=16711680)
+            em = discord.Embed(title='Insuficient arguments',description='No has facilitado ninguna opción, usa `$settings <opcion>` para consultar su valor o `$help settings` para visualizar las opciones.',color=16711680)
             await ctx.send(embed=em)
         elif opt == 'update':
             await mysql.settings_update(ctx.guild)
-            em = discord.Embed(title='Se han actualizado los ajustes',description=f'Se han actualizado los ajustes en este servidor, usa $settings list para verlos',color=5763719)
+            em = discord.Embed(title='Se han actualizado los ajustes',description='Se han actualizado los ajustes en este servidor, usa $settings list para verlos',color=5763719)
             await ctx.send(embed=em)
         elif opt == 'list':
             arr=await mysql.settings_list(ctx, ctx.guild)
-            em=discord.Embed(title=f'Opciones',description='Usa `$reaction edit <opt>` para cambiar cualquiera de las opciones:', color=5763719)
+            em=discord.Embed(title='Opciones',description='Usa `$reaction edit <opt>` para cambiar cualquiera de las opciones:', color=5763719)
             for entry in arr:
                 narr=str(entry).split(":")
                 em.add_field(name=f'_{narr[0]}_', value=f'{narr[1]}.',inline=False)
@@ -316,7 +331,7 @@ async def settings(ctx, opt=None, newval=None):
                             role=ctx.guild.get_role(int(newval))
                             role_name = role.name
                         except ValueError:
-                            em = discord.Embed(title=f'Invalid value',description=f'Los valores que acepta _{opt}_ son roles, para ello etiqueta el rol.',color=16711680)
+                            em = discord.Embed(title='Invalid value',description=f'Los valores que acepta _{opt}_ son roles, para ello etiqueta el rol.',color=16711680)
                             await ctx.send(embed=em)
                             return
                     elif opt in channel_options:
@@ -325,17 +340,17 @@ async def settings(ctx, opt=None, newval=None):
                             channel=ctx.guild.get_channel(int(newval))
                             role_name=channel.name
                         except:
-                            em = discord.Embed(title=f'Invalid value',description=f'{opt} solo acepta canales, para seleccionar un canal usa `#<canal>`.',color=16711680)
+                            em = discord.Embed(title='Invalid value',description=f'{opt} solo acepta canales, para seleccionar un canal usa `#<canal>`.',color=16711680)
                             await ctx.send(embed=em)
                             return
                     else:
                         role_name=None
                 query=await mysql.settings_set(ctx, ctx.guild, opt, newval, role_name)
                 if query is None:
-                    em = discord.Embed(title=f'Invalid Option',description=f'Tienes que elegir que opcion cambiar, para ver las opciones disponibles usa `$help settings`',color=16711680)
+                    em = discord.Embed(title='Invalid Option',description='Tienes que elegir que opcion cambiar, para ver las opciones disponibles usa `$help settings`',color=16711680)
                     await ctx.send(embed=em)
                 else:
-                    em = discord.Embed(title=f'Value updated',description=f'Se ha actualizado el valor de _{query[0]}_ a _{query[1]}_ correctamente.',color=5763719)
+                    em = discord.Embed(title='Value updated',description=f'Se ha actualizado el valor de _{query[0]}_ a _{query[1]}_ correctamente.',color=5763719)
                     await ctx.send(embed=em)
 
 # ◤━━━━━━━━━━━━━━━━━━━━°•RENAME•°━━━━━━━━━━━━━━━━━━━━━━◥
@@ -347,10 +362,10 @@ async def nick(ctx, nick_name, member: discord.Member = None):
     else:
         if member == ctx.author:
             await ctx.author.edit(nick=nick_name)
-            em = discord.Embed(title=f'Nick updated',description=f'Se ha cambiado el apodo correctamente.',color=5763719)
+            em = discord.Embed(title='Nick updated',description='Se ha cambiado el apodo correctamente.',color=5763719)
             await ctx.send(embed=em)
         else:
-            em = discord.Embed(title=f'Insuficient permissions', description=f'No tienes permisos suficientes para cambiarle el nick a {member}.',color=16711680)
+            em = discord.Embed(title='Insuficient permissions', description=f'No tienes permisos suficientes para cambiarle el nick a {member}.',color=16711680)
             await ctx.send(embed=em)
 
 
@@ -420,7 +435,7 @@ async def suggest(ctx, desc=None, excess=None):
         await ctx.send(embed=em)
     else:
         if excess is not None:
-            em = discord.Embed(title=f'Invalid value',description=f'Debes introducir la descripción entre comillas, por ejemplo $suggest "esto es un ejemplo de la sugerencia"',color=16711680)
+            em = discord.Embed(title='Invalid value',description=f'Debes introducir la descripción entre comillas, por ejemplo $suggest "esto es un ejemplo de la sugerencia"',color=16711680)
             await ctx.send(embed=em)
         else:
             try:
@@ -467,7 +482,7 @@ async def cumple(ctx, opt=None, day=None, month=None):
             else:
                 pass
         except:
-            em = discord.Embed(title=f'Invalid value',description=f'Debes introducir un numero de maximo dos cifras y no superior a 31, {day}, no cumple esos requisitos.',color=16711680)
+            em = discord.Embed(title='Invalid value',description=f'Debes introducir un numero de maximo dos cifras y no superior a 31, {day}, no cumple esos requisitos.',color=16711680)
             await ctx.send(embed=em)
             return
         try:
@@ -477,15 +492,41 @@ async def cumple(ctx, opt=None, day=None, month=None):
             else:
                 pass
         except:
-            em = discord.Embed(title=f'Invalid value',description=f'Debes introducir un numero de maximo dos cifras y no superior a 12, {month}, no cumple esos requisitos.',color=16711680)
+            em = discord.Embed(title='Invalid value',description=f'Debes introducir un numero de maximo dos cifras y no superior a 12, {month}, no cumple esos requisitos.',color=16711680)
             await ctx.send(embed=em)
             return
         date = str(day) + '/' + str(month)
-        await mysql.bday(ctx, ctx.guild, ctx.author.id, opt, date)
+        result = await mysql.bday(ctx, ctx.guild, ctx.author.id, opt, date)
+        if result is None:
+            em = discord.Embed(title='Invalid value',description=f'Debes introducir un numero de maximo dos cifras y no superior a 12, {month}, no cumple esos requisitos.',color=16711680)
+            await ctx.send(embed=em)
+        elif result == "already":
+            em = discord.Embed(title='Error', description='Ya tienes una fecha de cumpleaños asignada, para editarla usar $cumple edit <dia> <mes>.', color=16711680)
+            await ctx.send(embed=em)
+        elif opt == "edit":
+            em = discord.Embed(title='Value updated',description=f'He cambiado tu cumpleaños de {result[0]} a {result[1]}.',color=5763719)
+            await ctx.send(embed=em)
+        else:
+            em = discord.Embed(title='Value updated',description=f'He apuntado tu cumple el {result}.',color=5763719)
+            await ctx.send(embed=em)
     elif opt == 'remove' or opt == 'check':
-        await mysql.bday(ctx, ctx.guild, ctx.author.id, opt, day)
+        result = await mysql.bday(ctx, ctx.guild, ctx.author.id, opt)
+        if opt == "remove":
+            if result is None:
+                em = discord.Embed(title='Error',description='No tengo apuntado tu cumpleaños, usa $cumple set <dia> <mes>.', color=16711680)
+                await ctx.send(embed=em)
+            else:
+                em = discord.Embed(title='Value updated', description='He borrado tu cumple correctamente.', color=5763719)
+                await ctx.send(embed=em)
+        else:
+            if result is None:
+                em = discord.Embed(title='Error',description='No tengo apuntado tu cumpleaños, usa $cumple set <dia> <mes>.', color=16711680)
+                await ctx.send(embed=em)
+            else:
+                em = discord.Embed(title='Value updated', description=f'Tengo apuntado que tu cumple es {result}.', color=5763719)
+                await ctx.send(embed=em)
     else:
-        em = discord.Embed(title=f'Invalid option',description=f'Debes introducir una opcion valida, para ver las opciones usa $help cumple.',color=16711680)
+        em = discord.Embed(title='Invalid option',description='Debes introducir una opcion valida, para ver las opciones usa $help cumple.',color=16711680)
         await ctx.send(embed=em)
 
 # ◤━━━━━━━━━━━━━━━━━━°•REACTION•°━━━━━━━━━━━━━━━━━━━━◥
@@ -494,7 +535,13 @@ async def cumple(ctx, opt=None, day=None, month=None):
 @owner_or_admin()
 async def reaction(ctx, opt=None, role=None, role_emoji=None, role_description=None, role_name=None):
     if opt == 'create':
-        await mysql.react_create(ctx, str(ctx.guild))
+        result = await mysql.react_create(ctx, str(ctx.guild))
+        if result is None:
+            em = discord.Embed(title='Task failed',description='No puedes crear la tabla porque ya existe.',color=16711680)
+            await ctx.send(embed=em)
+        else:
+            em = discord.Embed(title='Table created', description='Se ha creado la tabla correctamente.', color=5763719)
+            await ctx.send(embed=em)
     elif opt == 'setup':
         await ctx.channel.purge(limit=1)
         message = role
@@ -614,37 +661,6 @@ async def reaction(ctx, opt=None, role=None, role_emoji=None, role_description=N
         embed.add_field(name='_remove_', value='Para eliminar un rol de la selección.')
         await ctx.send(embed=embed)
 
-# ◤━━━━━━━━━━━━━━━━━━━━━°•IMAGES•°━━━━━━━━━━━━━━━━━━━━━◥
-@bot.command()
-@dms()
-async def spank(ctx, user: discord.Member = None):
-    try:
-        spank_image = Image.open("images/spank.jpg")
-        spank_author = ctx.author.avatar_url_as(size=256)
-        spank_data = BytesIO(await spank_author.read())
-        sauthor_image = Image.open(spank_data)
-        if user == None:
-            print('Spanked' + str(ctx.author))
-            spank_image.paste(sauthor_image, (819, 386))
-            spanker = bot.user.avatar_url_as(size=256)
-            spanker_data = BytesIO(await spanker.read())
-            spanker_image = Image.open(spanker_data)
-            spank_image.paste(spanker_image, (566, 0))
-            spank_image.save("images/cache/spank.jpg")
-            await ctx.send(file = discord.File('images/cache/spank.jpg'))
-        else:
-                print('Spanked ' + str(user) + ' by ' + str(ctx.author))
-                spank_image.paste(sauthor_image, (566, 0))
-                spanked = user.avatar_url_as(size=256)
-                spanked_data = BytesIO(await spanked.read())
-                spanked_image = Image.open(spanked_data)
-                spank_image.paste(spanked_image, (819, 386))
-                spank_image.save("images/cache/spank.jpg")
-                await ctx.send(file=discord.File('images/cache/spank.jpg'))
-    except:
-        em = discord.Embed(title=f'Unknown user',description=f'No se ha podido encontrar al usuario.',color=16711680)
-        await ctx.send(embed=em)
-
 # ◤━━━━━━━━━━━━━━━━━━━━━°•KICK•°━━━━━━━━━━━━━━━━━━━━━◥
 @bot.command()
 @dms()
@@ -688,42 +704,48 @@ async def ban(ctx, member: discord.Member, *, reason=None):
 @dms()
 @helper_or_higher()
 async def mute(ctx, member: discord.Member, time=5):
-    mute_role=await mysql.settings_val(ctx.guild, 'mute')
-    if str(mute_role) == 'Default':
-        muter = await ctx.guild.create_role(name='muted', color=0x607d8b, hoist=True)
-        muter_id = muter.id
-        await mysql.settings_set(ctx, ctx.guild, 'mute', str(muter_id), None)
-    else:
-        try:
-            muter = ctx.guild.get_role(int(mute_role))
-            muter_id = muter.id
-        except:
+    try:
+        mute_role=await mysql.settings_val(ctx.guild, 'mute')
+        if str(mute_role) == 'Default':
             muter = await ctx.guild.create_role(name='muted', color=0x607d8b, hoist=True)
             muter_id = muter.id
             await mysql.settings_set(ctx, ctx.guild, 'mute', str(muter_id), None)
-    mute_channel=await mysql.settings_val(ctx.guild, 'mutechannel')
-    if mute_channel == 'Default':
-        channelr=await ctx.guild.create_text_channel(name='pov-has-sido-muteado')
-        channelr_id = channelr.id
-        await mysql.settings_set(ctx, ctx.guild, 'mutechannel', str(channelr_id), None)
-        overwrite = discord.PermissionOverwrite()
-        overwrite.send_messages = False
-        overwrite.read_messages = True
-        await channelr.set_permissions(muter, overwrite=overwrite)
-        overwrite.read_messages = False
-        everyone_role=discord.utils.get(ctx.guild.roles, name='@everyone')
-        await channelr.set_permissions(everyone_role, overwrite=overwrite)
-    else:
-        try:
-            channelr=ctx.guild.get_channel(int(mute_channel))
-            channelr_id = channelr.id
-        except:
-            channelr = await ctx.guild.create_text_channel(name='pov-has-sido-muteado')
+        else:
+            try:
+                muter = ctx.guild.get_role(int(mute_role))
+                muter_id = muter.id
+            except:
+                muter = await ctx.guild.create_role(name='muted', color=0x607d8b, hoist=True)
+                muter_id = muter.id
+                await mysql.settings_set(ctx, ctx.guild, 'mute', str(muter_id), None)
+        mute_channel=await mysql.settings_val(ctx.guild, 'mutechannel')
+        if mute_channel == 'Default':
+            channelr=await ctx.guild.create_text_channel(name='pov-has-sido-muteado')
             channelr_id = channelr.id
             await mysql.settings_set(ctx, ctx.guild, 'mutechannel', str(channelr_id), None)
-    await member.add_roles(muter)
-    await asyncio.sleep(int(time))
-    await member.remove_roles(muter)
+            overwrite = discord.PermissionOverwrite()
+            overwrite.send_messages = False
+            overwrite.read_messages = True
+            await channelr.set_permissions(muter, overwrite=overwrite)
+            overwrite.read_messages = False
+            everyone_role=discord.utils.get(ctx.guild.roles, name='@everyone')
+            await channelr.set_permissions(everyone_role, overwrite=overwrite)
+        else:
+            try:
+                channelr=ctx.guild.get_channel(int(mute_channel))
+                channelr_id = channelr.id
+            except:
+                channelr = await ctx.guild.create_text_channel(name='pov-has-sido-muteado')
+                channelr_id = channelr.id
+                await mysql.settings_set(ctx, ctx.guild, 'mutechannel', str(channelr_id), None)
+        await member.add_roles(muter)
+        await asyncio.sleep(int(time))
+        try:
+            await member.remove_roles(muter)
+        except:
+            pass
+    except:
+        pass
 
 # ◤━━━━━━━━━━━━━━━━━━━━━°•UNMUTE•°━━━━━━━━━━━━━━━━━━━━━◥
 
@@ -925,6 +947,8 @@ async def help(ctx):
     - Cumple
     - Nick
     - Spank
+    - Bonk
+    - Chad
     - Invite
     - Preffixes''')
     await ctx.send(embed=em)
@@ -1047,6 +1071,18 @@ async def nick(ctx):
 async def spank(ctx):
     em = discord.Embed(title='Spank',description='Azota a un usuario si se ha portado mal.',color=16711680)
     em.add_field(name='_Syntax_', value=prefix + '`spank <usuario>`')
+    await ctx.send(embed=em)
+
+@help.command()
+async def bonk(ctx):
+    em = discord.Embed(title='Bonk',description='Hazle bonk a un usuario si se ha portado mal.',color=16711680)
+    em.add_field(name='_Syntax_', value=prefix + '`bonk <usuario>`')
+    await ctx.send(embed=em)
+
+@help.command()
+async def chad(ctx):
+    em = discord.Embed(title='Chad',description='Demuestra a un usuario quien es el verdadero chad.',color=16711680)
+    em.add_field(name='_Syntax_', value=prefix + '`chad <usuario>`')
     await ctx.send(embed=em)
 
 @help.command(aliases = ['invitacion', 'invitar'])

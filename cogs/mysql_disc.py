@@ -34,18 +34,13 @@ async def bot_rem(guild):
 
 # ◤━━━━━━━━━━━━━━━━━━━━━°•RECONNECT•°━━━━━━━━━━━━━━━━━━━━━◥
 async def ping():
-    logfile=open('discordbot.log','a')
     try:
         conn.commit()
         conn.ping()
-        print(f'[OK] PING - {datetime.datetime.now().hour}:{datetime.datetime.now().minute} ')
     except mariadb.DatabaseError:
-        print(f'[OK2] PING - {datetime.datetime.now().hour}:{datetime.datetime.now().minute} ')
         conn.reconnect()
     except:
         pass
-    logfile.write(f'PING - {datetime.datetime.now().hour}:{datetime.datetime.now().minute}.\n')
-    logfile.close()
 
 async def reconnect():
     conn.reconnect()
@@ -154,16 +149,15 @@ async def settings_role(ctx, guild):
         arr.append(opt_value)
     return arr
 ####################--REACTIONS--############################
-  
+
 async def react_create(ctx, guild):
     server = str(guild).replace(' ','').lower()
     try:
         cur.execute(f'CREATE TABLE {server}_reactions (role_id VARCHAR(25) PRIMARY KEY, role_emoji VARCHAR(30), role_name VARCHAR(20), role_description VARCHAR(125));')
         conn.commit()
     except:
-        await ctx.send('No se puede crear la tabla porque ya existe.')
         return
-    await ctx.send('Se ha creado la tabla correctamente.')
+    return "ok"
 
 async def react_setup(ctx, guild, message):
     server = str(guild).replace(' ', '').lower()
@@ -268,40 +262,48 @@ async def react_checkmsg(guild, msg_id):
     except mariadb.InterfaceError:
         conn.reconnect()
 ####BDAYS
-async def bday(ctx, guild, userid, opt, date):
+async def bday(ctx, guild, userid, opt, date=None):
     server = str(guild).replace(' ', '').lower()
     if opt == 'set':
         cur.execute(f"SELECT user FROM {server}_bdays WHERE user = '{userid}';")
         coin = cur.fetchone()
-        if coin[0] is not None:
-            await ctx.send(f'Ya tienes una fecha de cumpleaños asignada, para editarla usar `$cumple edit <dia> <mes>`')
+        try:
+            coin[0]
+            return "already"
+        except:
+            cur.execute(f"INSERT INTO {server}_bdays (user, date) VALUES ('{userid}', '{date}');")
+            conn.commit()
+            return date
+    elif opt == 'remove':
+        try:
+            cur.execute(f"SELECT * FROM {server}_bdays WHERE user = '{userid}';")
+            coin = cur.fetchone()
+            coin[0]
+            cur.execute(f"DELETE FROM {server}_bdays WHERE user = '{userid}';")
+            conn.commit()
+            return "ok"
+        except:
             return
-        else:
-            pass
-        cur.execute(f"INSERT INTO {server}_bdays (user, date) VALUES ('{userid}', '{date}');")
-        conn.commit()
-        await ctx.send(f'Se ha añadido correctamente la fecha [{date}]')
-    elif opt == 'delete':
-        cur.execute(f"DELETE FROM {server}_bdays WHERE user = '{userid}';")
-        conn.commit()
-        await ctx.send(f'Se ha eliminado correctamente la fecha [{date}]')
     elif opt == 'check':
-        cur.execute(f"SELECT date FROM {server}_bdays WHERE user = '{userid}';")
-        date=cur.fetchone()
-        date=date[0]
-        await ctx.send(f'Tu cumple está confugirado para el: {date}')
+        try:
+            cur.execute(f"SELECT date FROM {server}_bdays WHERE user = '{userid}';")
+            date=cur.fetchone()
+            date=date[0]
+            return date
+        except:
+            return
     elif opt == 'edit':
         cur.execute(f"SELECT date FROM {server}_bdays WHERE user = '{userid}';")
         coin = cur.fetchone()
-        if coin[0] is None:
-            await ctx.send('No tienes ninguna fecha de cumpleaños guardada, para guardar una usa `$cumple set <dia> <mes>`')
+        try:
+            coin[0]
+        except:
             return
-        else:
-            cur.execute(f"SELECT date FROM {server}_bdays WHERE user = '{userid}';")
-            old_date = cur.fetchone()
-            old_date = old_date[0]
-            cur.execute(f"UPDATE {server}_bdays SET date = '{date}' WHERE user = '{userid}';")
-            await ctx.send(f'Se ha cambiado tu fecha de cumpleaños de _{old_date}_ a _{date}_')
+        cur.execute(f"SELECT date FROM {server}_bdays WHERE user = '{userid}';")
+        old_date = cur.fetchone()
+        old_date = old_date[0]
+        cur.execute(f"UPDATE {server}_bdays SET date = '{date}' WHERE user = '{userid}';")
+        return old_date, date
 
 async def bday_check(guild):
     server = str(guild).replace(' ', '').lower()
