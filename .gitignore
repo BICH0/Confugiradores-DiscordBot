@@ -1,0 +1,9 @@
+
+.env
+*.pyc
+discordbot.log
+images/cache/bonk.jpg
+images/cache/spank.jpg
+images/cache/chad.jpg
+start.sh
+
