@@ -2,7 +2,8 @@ import discord
 from discord.ext import commands, tasks
 import asyncio
 from dotenv import load_dotenv
-from os import getenv
+from os import getenv, system
+from subprocess import run
 import emojis
 import cogs.mysql_disc as mysql
 from datetime import datetime, timedelta
@@ -40,7 +41,7 @@ async def before_my_task():
     future = datetime(now.year, now.month, now.day, hour, minute)
     if now.hour >= hour and now.minute > minute:
         future += timedelta(days=1)
-    print((future-now).seconds)
+    print(str((future-now).seconds) + ' segundos para cambio de dia')
     await asyncio.sleep((future-now).seconds)
 
 @tasks.loop(hours=2)
@@ -53,6 +54,7 @@ class DirectMessage(Exception):
 
 class InsuficientPermissions(Exception):
     pass
+
 
 # LOGS
 @bot.event
@@ -91,6 +93,11 @@ async def on_command_error(ctx, error):
         return
     elif isinstance(error, commands.errors.MemberNotFound):
         em = discord.Embed(title=f'Unknown user',description=f'No se ha podido encontrar al usuario.',color=16711680)
+        await ctx.send(embed=em)
+    elif isinstance(error, discord.errors.Forbidden):
+        em = discord.Embed(title='Insuficient permissions',
+                           description=f'No tengo permisos suficientes para eso.',
+                           color=16711680)
         await ctx.send(embed=em)
     else:
         print(error)
@@ -136,12 +143,12 @@ async def on_member_remove(member):
 
 @bot.event
 async def on_guild_join(guild):
-    print(f'[JOIN] El bot ha entrado en {guild}')
+    print(f'- [JOIN] El bot ha entrado en {guild}')
     await mysql.settings(guild)
 
 @bot.event
 async def on_guild_remove(guild):
-    print(f'[LEFT] El bot ha abandonado {guild}')
+    print(f'- [LEFT] El bot ha abandonado {guild}')
     await mysql.bot_rem(guild)
 
 @bot.event
@@ -175,12 +182,29 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
                 await message.add_reaction('✅')
                 await message.add_reaction('❎')
             elif str(emoji) == '✅' or str(emoji) == '❎':
+                if str(channel.id) == str(await mysql.settings_val(message.guild, "whitelist")) and str(message.author.id) == str(bot.user.id):
+                    server=message.embeds[0].fields[2].value
+                    user=message.embeds[0].fields[0].value
+                    duser = message.embeds[0].title[13:]
+                    if str(emoji) == '❎':
+                        await message.delete()
+                    elif str(emoji) == '✅':
+                        comando=(await mysql.check(message.guild, server, "whitelist", "command", "server_name")).replace("&", "^M").replace("$user", str(user))
+                        print(f'[WL] {server} - {user}({duser})')
+                        em = discord.Embed(title="Whitelist aprobada",
+                                                   description="Enhorabuena!! Has sido aceptado en " + server, color=5763719)
+                        await message.guild.get_member_named(message.embeds[0].title[13:]).send(embed=em)
+                        system(comando)
+                        await message.delete()
+                        em = discord.Embed(title="Whitelist aprobada",
+                                                   description="El usuario " + reactor.name + " ha aceptado a " + user + " en " + server)
+                        await channel.send(embed=em)
                 return
             else:
                 emoji = emojis.decode(emoji)
-                comp = await mysql.react_checkmsg(message.guild, message.id)
+                comp = await mysql.react_checkmsg(message.guild, message.id, "reactmsg")
                 if comp is True:
-                    role_id = await mysql.react_check(message.channel, message.guild, emoji)
+                    role_id = await mysql.check(message.guild, emoji, "reactions", "role_id")
                     try:
                         role = message.guild.get_role(int(role_id))
                         await reactor.add_roles(role)
@@ -195,7 +219,53 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
                     except:
                         return
                 else:
-                    pass
+                    comp = await mysql.react_checkmsg(message.guild, message.id, "whitelistmsg")
+                    if comp is True:
+                        server = await mysql.check(message.guild, emoji, "whitelist", "server_name")
+                        try:
+                            comp2=None
+                            while comp2 is None:
+                                em = discord.Embed(title="Whitelist pendiente",
+                                                   description="Hola! Para solicitar tu entrada en el servidor necesito que me digas tu nombre ingame")
+                                await reactor.send(embed=em)
+                                msg = await bot.wait_for('message', check=lambda message: message.author == reactor)
+                                username=msg.content
+                                if username is None:
+                                    em = discord.Embed(title="Whitelist pendiente",
+                                                       description="Tu nombre no puede estar vacio, porfavor, intentalo de nuevo")
+                                    await reactor.send(embed=em)
+                                else:
+                                    em = discord.Embed(title="Whitelist pendiente",
+                                                       description="Escribe CORRECTO si tu nombre ingame es " + username)
+                                    await reactor.send(embed=em)
+                                    msg2 = await bot.wait_for('message', check=lambda message: message.author == reactor)
+                                    if msg2.content == "CORRECTO":
+                                        em = discord.Embed(title="Whitelist pendiente", description="Añade una breve presentacion o cuentanos por que quieres unirte al servidor y habrás terminado!!")
+                                        await reactor.send(embed=em)
+                                        msg3 = await bot.wait_for('message', check=lambda message: message.author == reactor)
+                                        em = discord.Embed(title="Whitelist pendiente",
+                                                           description="Se ha enviado tu solicitud a los moderadores!", color=5763719)
+                                        await reactor.send(embed=em)
+                                        whitelist_channel_id=await mysql.settings_val(message.guild, "whitelist")
+                                        try:
+                                            whitelist_channel=message.guild.get_channel(int(whitelist_channel_id))
+                                            if whitelist_channel is None:
+                                                raise Exception
+                                        except:
+                                            whitelist_channel=await message.guild.create_text_channel(name="Whitelists")
+                                            await mysql.settings_set(message, message.guild, "whitelist", whitelist_channel.id, None)
+                                        comp2=True
+                            em = discord.Embed(title="Solicitud de " + reactor.name + "#" +  str(reactor.discriminator), description="El siguiente usuario ha solicitado entrar en un servidor")
+                            em.add_field(name="Usuario", value=username)
+                            em.add_field(name="Postulacion", value=msg3.content)
+                            em.add_field(name="Servidor", value=server)
+                            msg=await whitelist_channel.send(embed=em)
+                            await msg.add_reaction('✅')
+                            await msg.add_reaction('❎')
+                        except:
+                            return
+                    else:
+                        pass
         else:
             return
     except AttributeError:
@@ -227,7 +297,7 @@ def owner_or_admin():
                     if admin in ctx.author.roles:
                         return True
                     else:
-                        raise commands.CheckFailure()
+                        raise InsuficientPermissions
                 except ValueError:
                     raise InsuficientPermissions
         except InsuficientPermissions:
@@ -253,7 +323,7 @@ def mod_or_higher():
                 if admin or mod in ctx.author.roles:
                     return True
                 else:
-                    raise commands.CheckFailure()
+                    raise InsuficientPermissions
         except InsuficientPermissions:
             em = discord.Embed(title='Insuficient permissions',description='No tienes los permisos suficientes para ejecutar ese comando.',color=16711680)
             await ctx.send(embed=em)
@@ -273,7 +343,7 @@ def helper_or_higher():
                     if admin or mod or helper in ctx.author.roles:
                         return True
                     else:
-                        raise commands.CheckFailure()
+                        raise InsuficientPermissions
                 except ValueError:
                     raise InsuficientPermissions
         except InsuficientPermissions:
@@ -356,17 +426,27 @@ async def settings(ctx, opt=None, newval=None):
 # ◤━━━━━━━━━━━━━━━━━━━━°•RENAME•°━━━━━━━━━━━━━━━━━━━━━━◥
 @bot.command(aliases=['rename', 'ren', 'alias'])
 @dms()
-async def nick(ctx, nick_name, member: discord.Member = None):
-    if ctx.author.guild_permissions.manage_nicknames:
-        await member.edit(nick=nick_name)
-    else:
-        if member == ctx.author:
-            await ctx.author.edit(nick=nick_name)
-            em = discord.Embed(title='Nick updated',description='Se ha cambiado el apodo correctamente.',color=5763719)
-            await ctx.send(embed=em)
+async def nick(ctx, nick_name, member = None):
+    try:
+        member = await ctx.guild.fetch_member(int(member[2:-1]))
+        if ctx.author.guild_permissions.manage_nicknames:
+            if member is None:
+                await ctx.author.edit(nick=nick_name)
+            else:
+                await member.edit(nick=nick_name)
         else:
-            em = discord.Embed(title='Insuficient permissions', description=f'No tienes permisos suficientes para cambiarle el nick a {member}.',color=16711680)
-            await ctx.send(embed=em)
+            if member == ctx.author:
+                await ctx.author.edit(nick=nick_name)
+                em = discord.Embed(title='Nick updated',description='Se ha cambiado el apodo correctamente.',color=5763719)
+                await ctx.send(embed=em)
+            else:
+                em = discord.Embed(title='Insuficient permissions', description=f'No tienes permisos suficientes para cambiarle el nick a {member}.',color=16711680)
+                await ctx.send(embed=em)
+    except:
+        em = discord.Embed(title='Error in command',
+                           description=f'Necesitas introducir como minimo tu nuevo nick $nick "<nuevo_nick>" [usuario].',
+                           color=16711680)
+        await ctx.send(embed=em)
 
 
 # ◤━━━━━━━━━━━━━━━━━━━━°•PING•°━━━━━━━━━━━━━━━━━━━━━━◥
@@ -386,6 +466,7 @@ async def say(ctx, title, description=None):
     else:
         try:
             em = discord.Embed(title=title,description=description,color=16711680)
+            await ctx.channel.purge(limit=1)
             await ctx.send(embed=em)
         except:
             pass
@@ -394,17 +475,20 @@ async def say(ctx, title, description=None):
 @bot.command()
 @dms()
 @mod_or_higher()
-async def send(ctx, route):
-    try:
-        await ctx.send(file=discord.File(route))
-    except:
-        pass
+async def send(ctx, route=None):
+    if route is None:
+        em = discord.Embed(title="Insuficient Arguments", description="Introduce una descripccion valida, $send <route>", color=16711680)
+    else:
+        try:
+            await ctx.send(file=discord.File(route))
+        except:
+            pass
 # ◤━━━━━━━━━━━━━━━━━━━━°•FORCE•°━━━━━━━━━━━━━━━━━━━━━━◥
 @bot.command()
 async def recon(ctx):
     if str(ctx.author) == author:
         await mysql.reconnect()
-        print('[RECONNECT] Forced')
+        print('- [RECONNECT] Forced')
     else:
         pass
 
@@ -535,7 +619,7 @@ async def cumple(ctx, opt=None, day=None, month=None):
 @owner_or_admin()
 async def reaction(ctx, opt=None, role=None, role_emoji=None, role_description=None, role_name=None):
     if opt == 'create':
-        result = await mysql.react_create(ctx, str(ctx.guild))
+        result = await mysql.create(ctx.guild, 'reactions', 'role_id ', 'emoji', 'role_name', 'role_description', None)
         if result is None:
             em = discord.Embed(title='Task failed',description='No puedes crear la tabla porque ya existe.',color=16711680)
             await ctx.send(embed=em)
@@ -595,7 +679,10 @@ async def reaction(ctx, opt=None, role=None, role_emoji=None, role_description=N
         if role is None:
             pass
         else:
-            await mysql.react_del(ctx, str(ctx.guild), role)
+            try:
+                await mysql.react_del(ctx, str(ctx.guild), role)
+            except:
+                pass
     elif opt == 'edit':
         option = role
         value = role_description
@@ -703,49 +790,59 @@ async def ban(ctx, member: discord.Member, *, reason=None):
 @bot.command()
 @dms()
 @helper_or_higher()
-async def mute(ctx, member: discord.Member, time=5):
-    try:
-        mute_role=await mysql.settings_val(ctx.guild, 'mute')
-        if str(mute_role) == 'Default':
+async def mute(ctx, member: discord.Member=None, time=5):
+    #try:
+    mute_role=await mysql.settings_val(ctx.guild, 'mute')
+    if str(mute_role) == 'Default':
+        muter = await ctx.guild.create_role(name='muted', color=0x607d8b, hoist=True)
+        muter_id = muter.id
+        await mysql.settings_set(ctx, ctx.guild, 'mute', str(muter_id), None)
+    else:
+        try:
+            muter = ctx.guild.get_role(int(mute_role))
+            muter_id = muter.id
+        except:
             muter = await ctx.guild.create_role(name='muted', color=0x607d8b, hoist=True)
             muter_id = muter.id
             await mysql.settings_set(ctx, ctx.guild, 'mute', str(muter_id), None)
-        else:
-            try:
-                muter = ctx.guild.get_role(int(mute_role))
-                muter_id = muter.id
-            except:
-                muter = await ctx.guild.create_role(name='muted', color=0x607d8b, hoist=True)
-                muter_id = muter.id
-                await mysql.settings_set(ctx, ctx.guild, 'mute', str(muter_id), None)
-        mute_channel=await mysql.settings_val(ctx.guild, 'mutechannel')
-        if mute_channel == 'Default':
-            channelr=await ctx.guild.create_text_channel(name='pov-has-sido-muteado')
+    mute_channel=await mysql.settings_val(ctx.guild, 'mutechannel')
+    if mute_channel == 'Default':
+        channelr=await ctx.guild.create_text_channel(name='pov-has-sido-muteado')
+        channelr_id = channelr.id
+        await mysql.settings_set(ctx, ctx.guild, 'mutechannel', str(channelr_id), None)
+        overwrite = discord.PermissionOverwrite()
+        overwrite.send_messages = False
+        overwrite.read_messages = True
+        await channelr.set_permissions(muter, overwrite=overwrite)
+        overwrite.read_messages = False
+        everyone_role=discord.utils.get(ctx.guild.roles, name='@everyone')
+        await channelr.set_permissions(everyone_role, overwrite=overwrite)
+    else:
+        try:
+            channelr=ctx.guild.get_channel(int(mute_channel))
+            channelr_id = channelr.id
+        except:
+            channelr = await ctx.guild.create_text_channel(name='pov-has-sido-muteado')
             channelr_id = channelr.id
             await mysql.settings_set(ctx, ctx.guild, 'mutechannel', str(channelr_id), None)
-            overwrite = discord.PermissionOverwrite()
-            overwrite.send_messages = False
-            overwrite.read_messages = True
-            await channelr.set_permissions(muter, overwrite=overwrite)
-            overwrite.read_messages = False
-            everyone_role=discord.utils.get(ctx.guild.roles, name='@everyone')
-            await channelr.set_permissions(everyone_role, overwrite=overwrite)
-        else:
-            try:
-                channelr=ctx.guild.get_channel(int(mute_channel))
-                channelr_id = channelr.id
-            except:
-                channelr = await ctx.guild.create_text_channel(name='pov-has-sido-muteado')
-                channelr_id = channelr.id
-                await mysql.settings_set(ctx, ctx.guild, 'mutechannel', str(channelr_id), None)
-        await member.add_roles(muter)
-        await asyncio.sleep(int(time))
-        try:
+    em = discord.Embed(title=f'You have been muted', description=f'Has sido muteado de {ctx.guild.name} por {str(time)} segundos.',
+                       color=16711680)
+    await member.send(embed=em)
+    await member.add_roles(muter)
+    await member.edit(mute=True)
+    await asyncio.sleep(int(time))
+    try:
+        if muter in member.roles:
+            em = discord.Embed(title=f'You have been unmuted',
+                               description=f'Has sido desmuteado de {ctx.guild.name}.',
+                               color=5763719)
+            await member.send(embed=em)
+            await member.edit(mute=False)
             await member.remove_roles(muter)
-        except:
-            pass
     except:
         pass
+    # except:
+    #     pass
 
 # ◤━━━━━━━━━━━━━━━━━━━━━°•UNMUTE•°━━━━━━━━━━━━━━━━━━━━━◥
 
@@ -753,9 +850,17 @@ async def mute(ctx, member: discord.Member, time=5):
 @dms()
 @helper_or_higher()
 async def unmute (ctx, member: discord.Member):
-    mute_name = await mysql.settings_val(ctx.guild, mute)
-    mute_role = discord.utils.get(ctx.guild.roles, name=str(mute_name))
-    await member.remove_roles(mute_role)
+    try:
+        em = discord.Embed(title=f'You have been unmuted',
+                           description=f'Has sido desmuteado de {ctx.guild.name} por {ctx.author.name}.',
+                           color=5763719)
+        await member.send(embed=em)
+        mute_name = await mysql.settings_val(ctx.guild, 'mute')
+        mute_role = ctx.guild.get_role(int(mute_name))
+        await member.edit(mute=False)
+        await member.remove_roles(mute_role)
+    except:
+        pass
 
 # ◤━━━━━━━━━━━━━━━━━━━━━°•TEST•°━━━━━━━━━━━━━━━━━━━━━◥
 @bot.command()
@@ -832,7 +937,7 @@ async def report(ctx, opt=None, body=None, excess=None):
             em = discord.Embed(title='Argumento invalido',description=f'{opt} no es una opción valida, a continuación tienes las opcines validas.',color=16711680)
             em.add_field(name='Bug',value='Si encuentras un fallo, algo que no funciona o cualquier falta de ortografia/expresión usa `$report bug <Descripcion del fallo que has encontrado>`')
             em.add_field(name='Sugerencia',value='Si tienes una idea que crees que puede aportar algo positivo al bot, ya sean funciones, alias para comandos o opciones usa `$report suggest <Sugerencia>`')
-            await support_channel.send(embed=em)
+            await ctx.send(embed=em)
     except:
         em = discord.Embed(title='No existe canal de soporte',description='Este servidor no tiene canal de soporte, habla con el owner para que lo active.',color=16711680)
         await ctx.send(embed=em)
@@ -910,7 +1015,7 @@ async def confugiradores(ctx):
     em=discord.Embed(title='F.A.Q', description='Aquí tienes las principales preguntas que nos hacen o que se te pueden venir a la cabeza', color=16711680)
     em.add_field(name='¿Quiénes somos?', value='Somos un grupo de amigos frikis e informáticos a partes iguales, nos conocimos estudiando y a raiz de nuestra '
                                                'relación se creó este proyecto, en el cual puedes encontrar desde páginas web hasta servidores de juegos o '
-                                               'bots como este (entre otros), cada uno tenemos nuestros conocimientos y campos en los que nos sentimos más cómodos'
+                                               'bots como este (entre otros), cada uno tenemos nuestros conocimientos y campos en los que nos sentimos más cómodos '
                                                'pero nos intentamos ayudar entre todos para ser mejores cada dia!!', inline=False)
     em.add_field(name='¿Tenéis página web?', value='Sí, tenemos casi todas bajo el dominio de confugiradores.es, ahí puedes encontrar todas las páginas personales de todos los integrantes así como la general.')
     em.add_field(name='¿Que habeis estudiado?', value='Todos hemos estudiado Sistemas Microinformáticos y Redes, aunque ahora cada uno está estudiando una rama distinta de la informática.')
@@ -928,6 +1033,92 @@ async def b1ch0(ctx):
                                    'más funciones, si quieres contactar conmigo puedes mandar un correo a `b1ch0@confugiradores.es` o hacer una sugerencia con `$report sugerencia "sugerencia"`',
                        color=16711680)
     await ctx.send(embed=em)
+# ◤━━━━━━━━━━━━━━━━━━━━°•Whitelist•°━━━━━━━━━━━━━━━━━━━━━━◥
+@bot.command()
+@mod_or_higher()
+async def whitelist(ctx, opt=None, v2=None, v3=None, v4=None, v5=None, *, v6=None):
+    if str(ctx.author) != author:
+        opt=None
+    if opt == "add":
+        query=await mysql.add(ctx.guild, "whitelist", v2, v3, v4, v5, v6)
+        if query is None:
+            em = discord.Embed(title='Error ocurred',
+                               description='No se ha podido añadir el registro por algun motivo.',
+                               color=16711680)
+        elif query == "primary":
+            em = discord.Embed(title='Error ocurred',
+                               description=f'Ya existe un servidor con el nombre {v3}.',
+                               color=16711680)
+        else:
+            em = discord.Embed(title='Registro añadido',
+                               description='Se ha añadido el registro correctamente.',
+                               color=5763719)
+        await ctx.send(embed=em)
+    elif opt == "remove":
+        query=await mysql.remove(ctx.guild, "whitelist", "server_name", v2)
+        if query is None:
+            em = discord.Embed(title='Error ocurred',
+                               description='No se ha podido borrar la tabla por algun motivo.',
+                               color=16711680)
+        else:
+            em = discord.Embed(title='Tabla eliminada',
+                               description='Se ha eliminado la tabla whitelist correctamente.',
+                               color=5763719)
+        await ctx.send(embed=em)
+    elif opt == "edit":
+        if v2 == "emoji":
+            newval=emojis.decode(v4)
+        await mysql.update(ctx.guild, "whitelist", v2, v3, v4)
+    elif opt == "list":
+        if v2 is None:
+            tabla=await mysql.list(ctx.guild, "whitelist")
+            em = discord.Embed(title="Whitelist", description="Estos son todos los servidores disponibles:")
+            for entry in tabla:
+                em.add_field(name=entry[2] + " | " + emojis.encode(entry[1]), value=f"__Descripción:__ {entry[3]}\n__Clase:__ {entry[0]}\n__Comando:__ {entry[4]}")
+            await ctx.send(embed=em)
+    else:
+        await ctx.channel.purge(limit=1)
+        query=await mysql.list(ctx.guild, "whitelist")
+        if query == "error":
+            if str(ctx.author) == author:
+                await mysql.create(ctx.guild, "whitelist", "server", "emoji", "server_name", "server_description", "command")
+                em = discord.Embed(title=f'Tabla creada',
+                                   description=f'Se ha creado la tabla whitelist correctamente.',
+                                   color=5763719)
+                await ctx.send(embed=em)
+            else:
+                em = discord.Embed(title=f'Error ocurred',
+                                   description=f'No tienes permiso para realizar esa acción habla con {author}.',
+                                   color=16711680)
+                await ctx.send(embed=em)
+            return
+        if str(query) == "[]":
+            em = discord.Embed(title=f'Error ocurred',
+                               description=f'No existe ningun registro, habla con {author} para añadirlos.',
+                               color=16711680)
+            await ctx.send(embed=em)
+            return
+        em = discord.Embed(title='Lista de servidores',
+                            description='Reacciona a este mensaje para solicitar la entrada a algun servidor',
+                            color=16711680)
+        serveremojis = []
+        for entry in query:
+            serveremoji=entry[1]
+            servername=entry[2]
+            serverdesc=entry[3]
+            em.add_field(name=servername + " - " + serveremoji, value=serverdesc)
+            serveremojis.append(serveremoji)
+        message = await ctx.send(embed=em)
+        try:
+            oldmsg = await mysql.settings_val(ctx.guild, "whitelistmsg")
+            oldmessage = await ctx.fetch_message(oldmsg)
+            await oldmessage.delete()
+        except:
+            pass
+        await mysql.settings_set(ctx, ctx.guild, 'whitelistmsg', message.id, None)
+        for emoji in serveremojis:
+            await message.add_reaction(emojis.encode(emoji))
+
 # »»——————————————————————————————HELP——————————————————————————————————««
 @bot.group(invoke_without_command=True)
 async def help(ctx):
@@ -1068,7 +1259,7 @@ async def cumple(ctx):
 @help.command(aliases=['ren', 'rename', 'alias'])
 async def nick(ctx):
     em = discord.Embed(title='Nick', description='Permite cambiar el nombre a un usuario si tienes permiso para ello o el tuyo propio.', color=16711680)
-    em.add_field(name='_Syntax_', value=prefix + '`nick <usuario> <nuevo nombre>`')
+    em.add_field(name='_Syntax_', value=prefix + '`nick <nuevo nombre> [usuario]`')
     await ctx.send(embed=em)
 
 @help.command()
@@ -1099,6 +1290,13 @@ async def invite(ctx):
 async def preffixes(ctx):
     em = discord.Embed(title='Preffixes', description='Envia los prefijos de los bots que mas me gustan.', color=16711680)
     em.add_field(name='_Preffixes_', value=prefix + '`preffixes`')
+    await ctx.send(embed=em)
+
+@help.command()
+async def whitelist(ctx):
+    em = discord.Embed(title='Preffixes', description='Este comando permite crear whitelists dinamicas para tus servidores.', color=16711680)
+    em.add_field(name='_Syntax_', value=prefix + '`whitelist [add|delete|list] <server> <emoji> <server_name> <server_description> <command>`')
+    em.add_field(name='_Extra_', value='En este comando todos los argumentos son obligatorios')
     await ctx.send(embed=em)
 
 

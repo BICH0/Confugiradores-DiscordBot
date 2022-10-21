@@ -25,9 +25,7 @@ cur=conn.cursor()
 async def bot_rem(guild):
     server = str(guild).replace(' ', '').lower()
     try:
-        cur.execute(f'DROP TABLE {server}_settings;')
-        cur.execute(f'DROP TABLE {server}_reactions;')
-        cur.execute(f'DROP TABLE {server}_bdays;')
+        cur.execute(f'DROP TABLE {server}_*;')
         conn.ping()
     except:
         pass
@@ -149,27 +147,62 @@ async def settings_role(ctx, guild):
         arr.append(opt_value)
     return arr
 ####################--REACTIONS--############################
+async def list(guild, table):
+    server = str(guild).replace(' ', '').lower()
+    try:
+        cur.execute(f"SELECT * FROM {server}_{table} where 1=1;")
+        result=cur.fetchall()
+        return result
+    except:
+        return "error"
 
-async def react_create(ctx, guild):
+async def create(guild, table, f1, f2, f3, f4, f5):
     server = str(guild).replace(' ','').lower()
     try:
-        cur.execute(f'CREATE TABLE {server}_reactions (role_id VARCHAR(25) PRIMARY KEY, role_emoji VARCHAR(30), role_name VARCHAR(20), role_description VARCHAR(125));')
+        if table == "whitelist":
+            cur.execute(f'CREATE TABLE {server}_{table} ({f1} VARCHAR(25), {f2} VARCHAR(30) UNIQUE , {f3} VARCHAR(30) PRIMARY KEY, {f4} VARCHAR(125), {f5} VARCHAR(256));')
+        else:
+            cur.execute(f'CREATE TABLE {server}_{table} ({f1} VARCHAR(25) PRIMARY KEY, {f2} VARCHAR(30) UNIQUE, {f3} VARCHAR(20), {f4} VARCHAR(125));')
         conn.commit()
+        return "ok"
     except:
         return
-    return "ok"
+
+async def remove(guild, table, field, value):
+    server = str(guild).replace(' ', '').lower()
+    try:
+        cur.execute(f"DELETE FROM {server}_{table} WHERE {field} = '{value}';")
+        conn.commit()
+        return "ok"
+    except:
+        return
+
+async def update(guild, table, field, entry, newval):
+    server = str(guild).replace(' ', '').lower()
+    cur.execute(f"UPDATE {server}_{table} SET {field} = '{newval}' WHERE role_id = '{role}';")
+
+async def add(guild, table, v1, v2, v3, v4, v5):
+    v2=emojis.decode(v2)
+    server = str(guild).replace(' ', '').lower()
+    try:
+        if table == "whitelist":
+            cur.execute(f"INSERT INTO {server}_{table} (server, emoji, server_name, server_description, command) VALUES ('{v1}', '{v2}', '{v3}', '{v4}', '{v5}');")
+            conn.commit()
+            return "perfect"
+    except mariadb.IntegrityError:
+        return "primary"
 
 async def react_setup(ctx, guild, message):
     server = str(guild).replace(' ', '').lower()
-    cur.execute(f'SELECT role_name, role_emoji, role_description FROM {server}_reactions;')
+    cur.execute(f'SELECT role_name, emoji, role_description FROM {server}_reactions;')
     if message is None:
         message = '_Reacciona con cualquiera de los emoticonos para recibir el rol asociado!!_\n'
     else:
         message = message + '\n'
     emoji_rol = []
-    for (role_name, role_emoji, role_description) in cur:
-        message += f'[ {role_emoji} ] {role_name}: {role_description}\n'
-        emoji_rol.append(emojis.encode(str(role_emoji)))
+    for (role_name, emoji, role_description) in cur:
+        message += f'[ {emoji} ] {role_name}: {role_description}\n'
+        emoji_rol.append(emojis.encode(str(emoji)))
     msg_react = await ctx.send(message)
     for reaction in emoji_rol:
         await msg_react.add_reaction(reaction)
@@ -187,9 +220,8 @@ async def react_setup(ctx, guild, message):
 
 async def react_add(ctx, guild, role_id, role_emoji, role_name, role_description):
     server = str(guild).replace(' ', '').lower()
-    #print(f'role id -> [{role_id}] role emoji -> [{role_emoji}] role_name -> [{role_name}] role_description -> [{role_description}] guild -> [{server}]')
     try:
-        cur.execute(f"INSERT INTO {server}_reactions (role_id, role_emoji, role_name, role_description) VALUES ('{role_id}','{role_emoji}','{role_name}','{role_description}');")
+        cur.execute(f"INSERT INTO {server}_reactions (role_id, emoji, role_name, role_description) VALUES ('{role_id}','{role_emoji}','{role_name}','{role_description}');")
         print(f'[+REACTION] Se ha agregado {role_name} correctamente en {guild}')
         await ctx.send(f'Se ha agregado _{role_name}_ correctamente.')
         conn.commit()
@@ -198,13 +230,13 @@ async def react_add(ctx, guild, role_id, role_emoji, role_name, role_description
 
 async def react_list(ctx, guild):
     server = str(guild).replace(' ', '').lower()
-    cur.execute(f'SELECT role_emoji, role_name FROM {server}_reactions;')
+    cur.execute(f'SELECT emoji, role_name FROM {server}_reactions;')
     if cur.fetchone() is None:
         await ctx.send('No hay ningun rol configurado, para añadir uno utiliza `$reaction add <role> <emoji> <descripción> <alias>`')
     else:
-        cur.execute(f'SELECT role_emoji, role_name FROM {server}_reactions;')
-        for (role_emoji, role_name) in cur:
-            await ctx.send(f'Rol: {role_name} --> {role_emoji}')
+        cur.execute(f'SELECT emoji, role_name FROM {server}_reactions;')
+        for (emoji, role_name) in cur:
+            await ctx.send(f'Rol: {role_name} --> {emoji}')
 
 async def react_del(ctx, guild, role_name):
     server = str(guild).replace(' ','').lower()
@@ -237,10 +269,17 @@ async def react_name(ctx, name):
     except:
         return False
 
-async def react_check(ctx, guild, emoji):
+async def check(guild, emoji, table, field, selector=None):
     server=str(guild).replace(' ','').lower()
+    if field is None:
+        if table == "reactions":
+            field = "role_id"
+        else:
+            field = "server_name"
+    if selector is None:
+        selector='emoji'
     try:
-        cur.execute(f"SELECT role_id FROM {server}_reactions WHERE role_emoji = '{emoji}';")
+        cur.execute(f"SELECT {field} FROM {server}_{table} WHERE {selector} = '{emoji}';")
         role_id = cur.fetchone()
         if role_id is None:
             return
@@ -249,10 +288,10 @@ async def react_check(ctx, guild, emoji):
     except:
         return None
 
-async def react_checkmsg(guild, msg_id):
+async def react_checkmsg(guild, msg_id, option):
     try:
         server=str(guild).replace(' ','').lower()
-        cur.execute(f"SELECT opt_value FROM {server}_settings WHERE opt_name = 'reactmsg';")
+        cur.execute(f"SELECT opt_value FROM {server}_settings WHERE opt_name = '{option}';")
         message_id = cur.fetchone()
         message_id = message_id[0]
         if str(message_id) == str(msg_id):
@@ -318,6 +357,8 @@ async def bday_check(guild):
                     user = await guild.fetch_member(user)
                     channel = guild.get_channel(int(check[0]))
                     await channel.send(f'Felicidades {user.mention}!!')
+                    print("[BDAY]" + user)
+                    return
                 else:
                     pass
         except:
