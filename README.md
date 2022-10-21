@@ -24,6 +24,7 @@ El bot tiene comandos variados para moderar, pasarlo bien o añadir funcionalida
 * Preffixes
 * Settings
 * Reaction
+* Whitelist
 
 Para mas informacion de lo que hace cada función unete al <a href="https://discord.com/invite/9aqHgCT7jm">Discord</a> y usa $help.
 
