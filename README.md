@@ -63,7 +63,7 @@ Este proyecto se encuentra bajo la licencia GPLv3, esto significa:
 1. Puedes, copiar, modificar y distribuir este software.
 2. You have to include the license and copyright notice with each and every distribution.
 3. Puedes usar este software para propositos comerciales.
-4. Si modificas el código debes indicar que has modificado.
+4. Si modificas el código, debes indicar que has modificado.
 5. Cualquier modificacion DEBE ser distribuida bajo la licencia GPLv3.
 6. Este software carece de garantia por lo que tanto el autor como la licencia no se hacen responsables de ningun daño causado por el software.
             
